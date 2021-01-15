@@ -5,7 +5,7 @@ TensorFlow implementation of "RepVGG: Making VGG-style ConvNets Great Again"
 
 ## Concept
 <div align="center">
-  <img src="./figures/paper.png" width="600">  
+  <img src="./figures/paper.png" width="450">  
   <p>Sketch of the RegNet [1].</p>
 </div>
 
