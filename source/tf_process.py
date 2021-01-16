@@ -10,13 +10,10 @@ def training(neuralnet, dataset, epochs, batch_size, normalize=True):
     print("\nTraining to %d epochs (%d of minibatch size)" %(epochs, batch_size))
 
     iteration = 0
-
-    test_sq = 20
-    test_size = test_sq**2
     for epoch in range(epochs):
 
         while(True):
-            x_tr, y_tr, terminator = dataset.next_train(batch_size) # y_tr does not used in this prj.
+            x_tr, y_tr, terminator = dataset.next_train(batch_size)
 
             loss, accuracy, class_score = neuralnet.step(x=x_tr, y=y_tr, iteration=iteration, train=True)
 
@@ -24,7 +21,7 @@ def training(neuralnet, dataset, epochs, batch_size, normalize=True):
             if(terminator): break
 
             neuralnet.save_params()
-            
+
         print("Epoch [%d / %d] (%d iteration)  Loss:%.5f, Acc:%.5f" \
             %(epoch, epochs, iteration, loss, accuracy))
 
@@ -37,7 +34,7 @@ def test(neuralnet, dataset, batch_size):
 
     confusion_matrix = np.zeros((dataset.num_class, dataset.num_class), np.int32)
     while(True):
-        x_te, y_te, terminator = dataset.next_test(1) # y_te does not used in this prj.
+        x_te, y_te, terminator = dataset.next_test(1)
         loss, accuracy, class_score = neuralnet.step(x=x_te, y=y_te, train=False)
 
         label, logit = np.argmax(y_te[0]), np.argmax(class_score)
