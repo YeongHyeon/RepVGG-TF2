@@ -97,15 +97,18 @@ class CNN(object):
             print("flat", flat.shape)
 
         fc1 = self.customlayers.fullcon(flat, \
-            self.customlayers.get_weight(vshape=[h*w*c, self.num_class], name="fullcon1"))
+            self.customlayers.get_weight(vshape=[h*w*c, 128], name="fullcon1"))
+        fc2 = self.customlayers.fullcon(fc1, \
+            self.customlayers.get_weight(vshape=[128, self.num_class], name="fullcon2"))
         if(verbose):
             print("fullcon1", fc1.shape)
+            print("fullcon2", fc2.shape)
             print("\nNum Parameter")
             print("Feature Extractor : %d" %(num_param_fe))
             print("Classifier        : %d" %(self.customlayers.num_params - num_param_fe))
             print("Total             : %d" %(self.customlayers.num_params))
 
-        return fc1
+        return fc2
 
     def repvgg(self, input, ksize, inchannel, outchannel, stride_size=1, \
         name="", train=False, verbose=False):
