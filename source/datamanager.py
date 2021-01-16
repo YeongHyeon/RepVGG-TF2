@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 
 from sklearn.utils import shuffle
+from keras.utils import to_categorical
 
 class Dataset(object):
 
@@ -17,6 +18,9 @@ class Dataset(object):
 
         self.x_tr = np.ndarray.astype(self.x_tr, np.float32)
         self.x_te = np.ndarray.astype(self.x_te, np.float32)
+
+        self.y_tr, self.y_te = \
+            to_categorical(self.y_tr), to_categorical(self.y_te)
 
         self.num_tr, self.num_te = self.x_tr.shape[0], self.x_te.shape[0]
         self.idx_tr, self.idx_te = 0, 0
@@ -74,7 +78,7 @@ class Dataset(object):
             min_x, max_x = x_tr.min(), x_tr.max()
             x_tr = (x_tr - min_x) / (max_x - min_x)
 
-        return x_tr, self.label2vector(labels=y_tr), terminator
+        return x_tr, y_tr, terminator
 
     def next_test(self, batch_size=1):
 
@@ -92,4 +96,4 @@ class Dataset(object):
             min_x, max_x = x_te.min(), x_te.max()
             x_te = (x_te - min_x) / (max_x - min_x)
 
-        return x_te, self.label2vector(labels=y_te), terminator
+        return x_te, y_te, terminator
