@@ -24,6 +24,7 @@ TensorFlow implementation of "RepVGG: Making VGG-style ConvNets Great Again"
 ## Requirements
 * Python 3.7.6  
 * Tensorflow 2.1.0  
+* Keras 2.3.1  
 * Numpy 1.18.1  
 * Matplotlib 3.1.3  
 
