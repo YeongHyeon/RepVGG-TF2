@@ -37,8 +37,8 @@ class CNN(object):
             self.optimizer.apply_gradients(zip(gradients, self.customlayers.params_trainable))
 
             with self.summary_writer.as_default():
-                tf.summary.scalar('RegVGG/loss', loss, step=iteration)
-                tf.summary.scalar('RegVGG/accuracy', accuracy, step=iteration)
+                tf.summary.scalar('RepVGG/loss', loss, step=iteration)
+                tf.summary.scalar('RepVGG/accuracy', accuracy, step=iteration)
 
         return loss, accuracy, score
 
@@ -114,21 +114,20 @@ class CNN(object):
             self.customlayers.get_weight(vshape=[ksize, ksize, inchannel, outchannel], name="%s_main" %(name)), \
             stride_size=stride_size, padding='SAME')
         branch_main_bn = self.customlayers.batch_norm(branch_main, name="%s_main_bn" %(name))
-        branch_main_act = self.customlayers.elu(branch_main_bn)
 
         branch_sub = self.customlayers.conv2d(input, \
             self.customlayers.get_weight(vshape=[1, 1, inchannel, outchannel], name="%s_sub" %(name)), \
             stride_size=stride_size, padding='SAME')
         branch_sub_bn = self.customlayers.batch_norm(branch_sub, name="%s_sub_bn" %(name))
-        branch_sub_act = self.customlayers.elu(branch_sub_bn)
 
         if(train):
             if(stride_size == 1):
-                output = branch_main_act + branch_sub_act + input
+                output = branch_main_bn + branch_sub_bn + input
             else:
-                output = branch_main_act + branch_sub_act
+                output = branch_main_bn + branch_sub_bn
         else:
-            output = branch_main_act
+            output = branch_main_bn
+        output_act = self.customlayers.elu(output)
 
-        if(verbose): print(name, output.shape)
-        return output
+        if(verbose): print(name, output_act.shape)
+        return output_act
