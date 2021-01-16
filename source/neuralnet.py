@@ -117,7 +117,7 @@ class CNN(object):
         branch_main_act = self.customlayers.elu(branch_main_bn)
 
         branch_sub = self.customlayers.conv2d(input, \
-            self.customlayers.get_weight(vshape=[ksize, ksize, inchannel, outchannel], name="%s_sub" %(name)), \
+            self.customlayers.get_weight(vshape=[1, 1, inchannel, outchannel], name="%s_sub" %(name)), \
             stride_size=stride_size, padding='SAME')
         branch_sub_bn = self.customlayers.batch_norm(branch_sub, name="%s_sub_bn" %(name))
         branch_sub_act = self.customlayers.elu(branch_sub_bn)
