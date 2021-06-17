@@ -23,7 +23,7 @@ class Agent(object):
 
         self.__model = Neuralnet(\
             who_am_i="RepVGG", **kwargs, \
-            filters=[1, 32, 64, 128])
+            num_blocks=[2, 4, 14, 1])
 
         dummy = tf.zeros((1, self.dim_h, self.dim_w, self.dim_c), dtype=tf.float32)
         self.__model.forward(x=dummy, training=True, verbose=True)
@@ -118,7 +118,7 @@ class Neuralnet(tf.Module):
         self.dim_c = kwargs['dim_c']
         self.ksize = kwargs['ksize']
         self.num_class = kwargs['num_class']
-        self.filters = kwargs['filters']
+        self.num_blocks = kwargs['num_blocks']
 
         self.layer = wbl.Layers()
 
@@ -134,13 +134,17 @@ class Neuralnet(tf.Module):
 
     def __nn(self, x, training, name='neuralnet', verbose=True):
 
-        att = None
-        for idx, _ in enumerate(self.filters[:-1]):
-            if(idx == 0): continue
-            x = self.__repvgg(x=x, ksize=self.ksize, filter_in=self.filters[idx-1], filter_out=self.filters[idx], stride=2, \
-                activation='relu', name='%s-%d_repvgg1' %(name, idx), training=training, verbose=verbose)
-            x = self.__repvgg(x=x, ksize=self.ksize, filter_in=self.filters[idx], filter_out=self.filters[idx], stride=1, \
-                activation='relu', name='%s-%d_repvgg2' %(name, idx), training=training, verbose=verbose)
+        filter_in, filter_out = self.dim_c, 16
+        for idx_b, blocks in enumerate(self.num_blocks):
+
+            for idx_bi in range(blocks):
+                if(idx_bi % 2 == 0): group = 1
+                else: group = 2
+                x = self.__repvgg(x=x, ksize=self.ksize, filter_in=filter_in, filter_out=filter_out, stride=2, group=group, \
+                    activation='relu', name='%s-%d-%d' %(name, idx_b, idx_bi), training=training, verbose=verbose)
+                filter_in = filter_out
+
+            filter_out *= 2
 
         x = tf.math.reduce_mean(x, axis=(1, 2))
         x = self.layer.fully_connected(x=x, c_out=self.num_class, \
@@ -148,7 +152,7 @@ class Neuralnet(tf.Module):
 
         return x
 
-    def __repvgg(self, x, ksize, filter_in, filter_out, stride=1, \
+    def __repvgg(self, x, ksize, filter_in, filter_out, stride=1, group=1, \
         activation='relu', name="", training=False, verbose=False):
 
         if(training):
@@ -165,11 +169,11 @@ class Neuralnet(tf.Module):
             else:
                 x = x_main + x_sub
         else:
-            x = self.__fuse_to_deploy(x=x, stride=stride, name=name)
+            x = self.__fuse_to_deploy(x=x, stride=stride, group=group, name=name)
 
         return self.layer.activation(x, activation=activation, name='%s_act' %(name))
 
-    def __fuse_to_deploy(self, x, stride=1, \
+    def __fuse_to_deploy(self, x, stride=1, group=1, \
         dilations=[1, 1, 1, 1], padding='SAME', name=""):
 
         main_w = self.layer.parameters['%s_main_w' %(name)]
@@ -189,15 +193,15 @@ class Neuralnet(tf.Module):
             list_shape = main_w.get_shape().as_list()
             id_w = np.zeros(list_shape)
             idx_k, num_c = int(list_shape[0]/2), list_shape[-2]
-            group = num_c // 2
+            group_check = num_c // group
             for idx_c in range(num_c):
-                id_w[idx_k, idx_k, idx_c, idx_c % group] = 1
+                id_w[idx_k, idx_k, idx_c, idx_c % group_check] = 1
             id_w = tf.convert_to_tensor(id_w, dtype=tf.float32)
             id_mean, id_variance, id_ofs, id_sce = self.__bn_extraction(x=x, name="%s_id_bn" %(name))
-            # id_w, id_b = self.__fuse_w_bn(id_w, id_mean, id_variance, id_ofs, id_sce)
+            id_w, id_b = self.__fuse_w_bn(id_w, id_mean, id_variance, id_ofs, id_sce)
 
             w = w + id_w
-            # b = b + id_b
+            b = b + id_b
 
         wx = tf.nn.conv2d(
             input=x,
