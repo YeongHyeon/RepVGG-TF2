@@ -1,64 +1,83 @@
-import os, inspect
-
-import tensorflow as tf
+import os
+import scipy.ndimage
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve, auc
 
-PACK_PATH = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))+"/.."
+import source.utils as utils
 
-def training(neuralnet, dataset, epochs, batch_size, normalize=True):
+def perform_from_confmat(confusion_matrix, num_class, verbose=False):
 
-    print("\nTraining to %d epochs (%d of minibatch size)" %(epochs, batch_size))
+    dict_perform = {'accuracy':0, 'precision':0, 'recall':0, 'f1score':0}
 
+    for idx_c in range(num_class):
+        precision = np.nan_to_num(confusion_matrix[idx_c, idx_c] / np.sum(confusion_matrix[:, idx_c]))
+        recall = np.nan_to_num(confusion_matrix[idx_c, idx_c] / np.sum(confusion_matrix[idx_c, :]))
+        f1socre = np.nan_to_num(2 * (precision * recall / (precision + recall)))
+
+        dict_perform['accuracy'] += confusion_matrix[idx_c, idx_c]
+        dict_perform['precision'] += precision
+        dict_perform['recall'] += recall
+        dict_perform['f1score'] += f1socre
+
+        if(verbose):
+            print("Class-%d | Precision: %.5f, Recall: %.5f, F1-Score: %.5f" \
+                %(idx_c, precision, recall, f1socre))
+
+    for key in list(dict_perform.keys()):
+        if('accuracy' == key): dict_perform[key] = dict_perform[key] / np.sum(confusion_matrix)
+        else: dict_perform[key] = dict_perform[key] / num_class
+        print("%s: %.5f" %(key.upper(), dict_perform[key]))
+
+    return dict_perform
+
+def training(agent, dataset, batch_size, epochs):
+
+    print("\n** Training of the CNN to %d epoch | Batch size: %d" %(epochs, batch_size))
     iteration = 0
+
     for epoch in range(epochs):
 
+        list_loss = []
         while(True):
-            x_tr, y_tr, terminator = dataset.next_train(batch_size)
-
-            loss, accuracy, class_score = neuralnet.step(x=x_tr, y=y_tr, iteration=iteration, train=True)
-
+            minibatch = dataset.next_batch(batch_size=batch_size, tt=0)
+            if(len(minibatch['x'].shape) == 1): break
+            step_dict = agent.step(minibatch=minibatch, iteration=iteration, training=True)
             iteration += 1
-            if(terminator): break
+            list_loss.append(step_dict['losses']['entropy'])
+            if(minibatch['t']): break
 
-            neuralnet.save_params()
+        print("Epoch [%d / %d] | Loss: %f" %(epoch, epochs, np.average(list_loss)))
+        agent.save_params(model='model_0_finepocch')
 
-        print("Epoch [%d / %d] (%d iteration)  Loss:%.5f, Acc:%.5f" \
-            %(epoch, epochs, iteration, loss, accuracy))
+def test(agent, dataset, batch_size):
 
-def test(neuralnet, dataset, batch_size):
+    savedir = 'results_te'
+    utils.make_dir(path=savedir, refresh=True)
 
-    try: neuralnet.load_params()
-    except: print("Parameter loading was failed")
+    list_model = utils.sorted_list(os.path.join('Checkpoint', 'model*'))
+    for idx_model, path_model in enumerate(list_model):
+        list_model[idx_model] = path_model.split('/')[-1]
 
-    print("\nTest...")
+    for idx_model, path_model in enumerate(list_model):
 
-    confusion_matrix = np.zeros((dataset.num_class, dataset.num_class), np.int32)
-    while(True):
-        x_te, y_te, terminator = dataset.next_test(1)
-        loss, accuracy, class_score = neuralnet.step(x=x_te, y=y_te, train=False)
+        print("\n** Test with %s" %(path_model))
+        agent.load_params(model=path_model)
+        utils.make_dir(path=os.path.join(savedir, path_model), refresh=False)
 
-        label, logit = np.argmax(y_te[0]), np.argmax(class_score)
-        confusion_matrix[label, logit] += 1
+        confusion_matrix = np.zeros((dataset.num_class, dataset.num_class), np.int32)
+        while(True):
+            minibatch = dataset.next_batch(batch_size=batch_size, tt=1)
+            if(len(minibatch['x'].shape) == 1): break
+            step_dict = agent.step(minibatch=minibatch, training=False)
 
-        if(terminator): break
+            for idx_y, _ in enumerate(minibatch['y']):
+                y_true = np.argmax(minibatch['y'][idx_y])
+                y_pred = np.argmax(step_dict['y_hat'][idx_y])
+                confusion_matrix[y_true, y_pred] += 1
 
-    print("\nConfusion Matrix")
-    print(confusion_matrix)
+            if(minibatch['t']): break
 
-    tot_precision, tot_recall, tot_f1score = 0, 0, 0
-    diagonal = 0
-    for idx_c in range(dataset.num_class):
-        precision = confusion_matrix[idx_c, idx_c] / np.sum(confusion_matrix[:, idx_c])
-        recall = confusion_matrix[idx_c, idx_c] / np.sum(confusion_matrix[idx_c, :])
-        f1socre = 2 * (precision * recall / (precision + recall))
-
-        tot_precision += precision
-        tot_recall += recall
-        tot_f1score += f1socre
-        diagonal += confusion_matrix[idx_c, idx_c]
-        print("Class-%d | Precision: %.5f, Recall: %.5f, F1-Score: %.5f" \
-            %(idx_c, precision, recall, f1socre))
-
-    accuracy = diagonal / np.sum(confusion_matrix)
-    print("\nTotal | Accuracy: %.5f, Precision: %.5f, Recall: %.5f, F1-Score: %.5f" \
-        %(accuracy, tot_precision/dataset.num_class, tot_recall/dataset.num_class, tot_f1score/dataset.num_class))
+        dict_perform = perform_from_confmat(confusion_matrix=confusion_matrix, num_class=dataset.num_class, verbose=True)
+        np.save(os.path.join(savedir, path_model, 'conf_mat.npy'), confusion_matrix)
