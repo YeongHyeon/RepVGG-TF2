@@ -57,6 +57,7 @@ def test(agent, dataset, batch_size):
     utils.make_dir(path=savedir, refresh=True)
 
     list_model = utils.sorted_list(os.path.join('Checkpoint', 'model*'))
+
     for idx_model, path_model in enumerate(list_model):
         list_model[idx_model] = path_model.split('/')[-1]
 

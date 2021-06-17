@@ -141,8 +141,6 @@ class Neuralnet(tf.Module):
                 activation='relu', name='%s-%d_repvgg1' %(name, idx), training=training, verbose=verbose)
             x = self.__repvgg(x=x, ksize=self.ksize, filter_in=self.filters[idx], filter_out=self.filters[idx], stride=1, group=2, \
                 activation='relu', name='%s-%d_repvgg2' %(name, idx), training=training, verbose=verbose)
-            x = self.__repvgg(x=x, ksize=self.ksize, filter_in=self.filters[idx], filter_out=self.filters[idx], stride=1, group=1, \
-                activation='relu', name='%s-%d_repvgg3' %(name, idx), training=training, verbose=verbose)
 
         x = tf.math.reduce_mean(x, axis=(1, 2))
         x = self.layer.fully_connected(x=x, c_out=self.num_class, \
