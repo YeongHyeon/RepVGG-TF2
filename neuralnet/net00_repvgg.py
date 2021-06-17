@@ -172,31 +172,25 @@ class Neuralnet(tf.Module):
     def __fuse_to_deploy(self, x, stride=1, group=1, \
         dilations=[1, 1, 1, 1], padding='SAME', name=""):
 
-        main_w = self.layer.parameters['%s_main_w' %(name)]
-        main_mean, main_variance, main_ofs, main_sce = self.__bn_extraction(x=x, name="%s_main_bn" %(name))
-        main_w, main_b = self.__fuse_w_bn(main_w, main_mean, main_variance, main_ofs, main_sce)
-
-        sub_w = self.layer.parameters['%s_sub_w' %(name)]
-        sub_mean, sub_variance, sub_ofs, sub_sce = self.__bn_extraction(x=x, name="%s_sub_bn" %(name))
+        w_main = self.layer.parameters['%s_main_w' %(name)]
+        b_main = self.layer.parameters['%s_main_b' %(name)]
+        w_sub = self.layer.parameters['%s_sub_w' %(name)]
+        b_sub = self.layer.parameters['%s_sub_b' %(name)]
         pad = int((self.ksize-1)/2)
-        sub_w = tf.pad(sub_w, paddings=[[pad, pad], [pad, pad], [0, 0], [0, 0]], mode='CONSTANT', constant_values=0)
-        sub_w, sub_b = self.__fuse_w_bn(sub_w, sub_mean, sub_variance, sub_ofs, sub_sce)
+        w_sub = tf.pad(w_sub, paddings=[[pad, pad], [pad, pad], [0, 0], [0, 0]], mode='CONSTANT', constant_values=0)
 
-        w = main_w + sub_w
-        b = main_b + sub_b
+        w = w_main + w_sub
+        b = b_main + b_sub
 
         if(stride == 1):
-            list_shape = main_w.get_shape().as_list()
-            id_w = np.zeros(list_shape)
+            list_shape = w_main.get_shape().as_list()
+            w_id = np.zeros(list_shape)
             idx_k, num_c = int(list_shape[0]/2), list_shape[-2]
             for idx_c in range(num_c):
-                id_w[idx_k, idx_k, idx_c, ::group] = 1
-            id_w = tf.convert_to_tensor(id_w, dtype=tf.float32)
-            id_mean, id_variance, id_ofs, id_sce = self.__bn_extraction(x=x, name="%s_id_bn" %(name))
-            id_w, id_b = self.__fuse_w_bn(id_w, id_mean, id_variance, id_ofs, id_sce)
+                w_id[idx_k, idx_k, idx_c, ::group] = 1
+            w_id = tf.convert_to_tensor(w_id, dtype=tf.float32)
 
-            w = w + id_w
-            b = b + id_b
+            w = w + w_id
 
         wx = tf.nn.conv2d(
             input=x,
@@ -208,7 +202,24 @@ class Neuralnet(tf.Module):
             name='%s_deploy_conv' %(name)
         )
 
-        return tf.math.add(wx, b, name='%s_deploy_add' %(name))
+        y = tf.math.add(wx, b, name='%s_deploy_add' %(name))
+
+        mean_main, variance_main, offset_main, scale_main = self.__bn_extraction(x=y, name='%s_main_bn' %(name))
+        mean_sub, variance_sub, offset_sub, scale_sub = self.__bn_extraction(x=y, name='%s_sub_bn' %(name))
+        try:
+            mean_id, variance_id, offset_id, scale_id = self.__bn_extraction(x=y, name='%s_id_bn' %(name))
+        except:
+            mean = mean_main + mean_sub
+            variance = variance_main + variance_sub
+            offset = offset_main + offset_sub
+            scale = scale_main + scale_sub
+        else:
+            mean = mean_main + mean_sub + mean_id
+            variance = variance_main + variance_sub + variance_id
+            offset = offset_main + offset_sub + offset_id
+            scale = scale_main + scale_sub + scale_id
+
+        return (scale * (y - mean)) / variance + offset
 
     def __bn_extraction(self, x, name=""):
 
@@ -216,11 +227,3 @@ class Neuralnet(tf.Module):
         ofs, sce = self.layer.parameters['%s_ofs' %(name)], self.layer.parameters['%s_sce' %(name)]
 
         return mean, variance, ofs, sce
-
-    def __fuse_w_bn(self, w, mean, variance, offset, scale):
-
-        mean = tf.math.reduce_mean(mean, axis=(1, 2, 3))
-        variance = tf.math.reduce_mean(variance, axis=(1, 2, 3))
-        std = (variance + 1e-12)**(0.5)
-        t = scale / std
-        return w * t, offset - mean * scale / std
