@@ -31,8 +31,8 @@ def main():
         path_ckpt = 'Checkpoint')
 
     time_tr = time.time()
-    # tfp.training(agent=agent, dataset=dataset, \
-    #     batch_size=FLAGS.batch, epochs=FLAGS.epochs)
+    tfp.training(agent=agent, dataset=dataset, \
+        batch_size=FLAGS.batch, epochs=FLAGS.epochs)
     time_te = time.time()
     tfp.test(agent=agent, dataset=dataset, batch_size=FLAGS.batch)
     time_fin = time.time()
